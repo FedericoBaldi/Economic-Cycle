@@ -3,12 +3,13 @@
 # Deploy with `firebase deploy`
 
 from firebase_functions import https_fn
-from firebase_admin import initialize_app
+from firebase_admin import initialize_app, firestore
 from firebase_admin import credentials
 from firebase_functions import firestore_fn, https_fn, scheduler_fn
-
+from datetime import datetime, timedelta
 import firebase_functions as functions
 from economic_cycle_firebase import calc_economy_status
+
 
 cred = credentials.Certificate('./economy-cycle-prediction-firebase-adminsdk-gshjg-f19c09500a.json')
 app = initialize_app(cred)
@@ -35,8 +36,8 @@ def daily_task(event: scheduler_fn.ScheduledEvent) -> None:
 def get_latest_status(req: https_fn.Request) -> https_fn.Response:
     db = firestore.client()
     # Get a reference to the latest document by ordering by date descending
-    doc_ref = db.collection("economy_status").order_by('__name__',  # Use "__name__" for document ID
-                                                   direction=firestore.Query.DESCENDING).limit(1).get()
+    # TODO: Check if this is the last or the first document
+    doc_ref = db.collection("economy_status").order_by("__name__").limit(1).get()
 
     # Check if documents exist
     if not doc_ref:

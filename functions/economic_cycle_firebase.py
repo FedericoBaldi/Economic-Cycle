@@ -23,7 +23,7 @@ def calc_economy_status():
 
     # Insert current date into the URL
     url_with_current_date = base_url.format(current_date, current_date, nd_date)
-    #print(url_with_current_date)
+    print(url_with_current_date)
 
     # Fetch the CSV data from the updated URL
     response = requests.get(url_with_current_date)
@@ -35,7 +35,7 @@ def calc_economy_status():
         from io import StringIO
         csv_data = StringIO(response.text)
         data = pd.read_csv(csv_data)
-        
+
     # Function to clean and convert values to float
     def clean_float(value):
         try:
@@ -48,7 +48,7 @@ def calc_economy_status():
             return np.nan
 
     # Load the CSV file
-    data = pd.read_csv('BAMLH0A0HYM2.csv')
+    # data = pd.read_csv('BAMLH0A0HYM2.csv')
 
     # Convert the 'DATE' column to a datetime format for sorting
     data['Date'] = pd.to_datetime(data['DATE'])
@@ -72,7 +72,7 @@ def calc_economy_status():
                 future_avg = np.nan
             averages.append(future_avg)
         return averages
-        
+
     #data['future_avg'] = calculate_future_average(data['BAMLH0A0HYM2_filled'])
     data['future_avg'] = data['BAMLH0A0HYM2_filled'].shift(90).rolling(window=8).mean()
 
