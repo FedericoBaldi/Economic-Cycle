@@ -11,7 +11,7 @@ import firebase_functions as functions
 from economic_cycle_firebase import calc_economy_status
 
 
-cred = credentials.Certificate('./economy-cycle-prediction-firebase-adminsdk-gshjg-f19c09500a.json')
+cred = credentials.Certificate('./credentials.json')
 app = initialize_app(cred)
 
 @scheduler_fn.on_schedule(schedule="every day 05:00")
