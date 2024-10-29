@@ -34,7 +34,7 @@ if response.status_code == 200:
     from io import StringIO
     csv_data = StringIO(response.text)
     data = pd.read_csv(csv_data)
-    
+
 # Function to clean and convert values to float
 def clean_float(value):
     try:
@@ -71,7 +71,7 @@ def calculate_future_average(series):
             future_avg = np.nan
         averages.append(future_avg)
     return averages
-    
+
 #data['future_avg'] = calculate_future_average(data['BAMLH0A0HYM2_filled'])
 data['future_avg'] = data['BAMLH0A0HYM2_filled'].shift(90).rolling(window=8).mean()
 
