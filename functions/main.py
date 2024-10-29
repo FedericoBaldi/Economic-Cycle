@@ -14,8 +14,8 @@ from economic_cycle_firebase import calc_economy_status
 cred = credentials.Certificate('./economy-cycle-prediction-firebase-adminsdk-gshjg-f19c09500a.json')
 app = initialize_app(cred)
 
-# @scheduler_fn.on_schedule(schedule="every day 05:00")
-@https_fn.on_request(cors=functions.options.CorsOptions(cors_origins="*", cors_methods=["get", "post"]), region="europe-west8")
+@scheduler_fn.on_schedule(schedule="every day 05:00")
+# @https_fn.on_request(cors=functions.options.CorsOptions(cors_origins="*", cors_methods=["get", "post"]), region="europe-west8")
 def daily_task(event: scheduler_fn.ScheduledEvent) -> None:
     status = calc_economy_status()
 
