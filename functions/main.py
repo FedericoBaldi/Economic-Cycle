@@ -14,8 +14,8 @@ from economic_cycle_firebase import calc_economy_status
 cred = credentials.Certificate('./credentials.json')
 app = initialize_app(cred)
 
-@scheduler_fn.on_schedule(schedule="every day 05:00")
-# @https_fn.on_request(cors=functions.options.CorsOptions(cors_origins="*", cors_methods=["get", "post"]), region="europe-west8")
+#@scheduler_fn.on_schedule(schedule="every day 05:00")
+@https_fn.on_request(cors=functions.options.CorsOptions(cors_origins="*", cors_methods=["get", "post"]), region="europe-west8")
 def daily_task(event: scheduler_fn.ScheduledEvent) -> None:
     status = calc_economy_status()
 
@@ -29,7 +29,7 @@ def daily_task(event: scheduler_fn.ScheduledEvent) -> None:
     doc_ref = db.collection("economy_status").document(today)
 
     # Set the status data as the document content
-    doc_ref.set({"status": status})
+    doc_ref.set({"status": status, "datetime": today})
     return https_fn.Response("Economy status saved successfully!")
 
 @https_fn.on_request(cors=functions.options.CorsOptions(cors_origins="*", cors_methods=["get", "post"]), region="europe-west8")
@@ -37,7 +37,7 @@ def get_latest_status(req: https_fn.Request) -> https_fn.Response:
     db = firestore.client()
     # Get a reference to the latest document by ordering by date descending
     # TODO: Check if this is the last or the first document
-    doc_ref = db.collection("economy_status").order_by("__name__").limit(1).get()
+    doc_ref = db.collection("economy_status").order_by("datetime", direction=firestore.Query.DESCENDING).limit(1).get()
 
     # Check if documents exist
     if not doc_ref:
