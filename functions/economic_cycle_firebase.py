@@ -3,9 +3,13 @@ import numpy as np
 import re
 from datetime import datetime, timedelta
 import requests
-
+from urllib.parse import urlencode
+from io import StringIO
+from io import BytesIO
+import zipfile
 
 def calc_economy_status():
+    '''
     # Base URL with the revision_date part to be replaced
     base_url = (
         "https://fred.stlouisfed.org/graph/fredgraph.csv?"
@@ -27,67 +31,75 @@ def calc_economy_status():
     # Insert current date into the URL
     url_with_current_date = base_url.format(nd_date, current_date, current_date, current_date, nd_date)
     print(url_with_current_date)
+    '''
+    BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
+
+    api_key = ""
+
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=3652)).strftime("%Y-%m-%d")
+
+    url = "https://api.stlouisfed.org/fred/series/observations"
+
+    params = {
+        "series_id": "BAMLH0A0HYM2",
+        "api_key": api_key,
+        "file_type": "csv",
+        "observation_start": start_date,
+        "observation_end": end_date,
+    }
+
+    # Use the Authorization header with Bearer token
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+    }
 
     # Fetch the CSV data from the updated URL
-    response = requests.get(url_with_current_date)
+    response = requests.get(url, params=params, headers=headers)
+    response.raise_for_status()
 
     data = pd.DataFrame([])
+    # Check content type
+    content_type = response.headers.get("Content-Type")
+    if content_type == "application/zip":
+        #with open("fred_response.zip", "wb") as f:
+        #    f.write(response.content)
+        # Unzip in memory
+        with zipfile.ZipFile(BytesIO(response.content)) as z:
+            csv_name = next(name for name in z.namelist() if name.lower().endswith(".csv"))
+            with z.open(csv_name) as f:
+                data = pd.read_csv(
+                    f,
+                    parse_dates=[0], 
+                    na_values=".")
+    else:
+        # Plain CSV
+        data = pd.read_csv(StringIO(response.text), parse_dates=[0], na_values=".")
+
     # Check if the request was successful
     if response.status_code == 200:
-        # Load the data into a pandas DataFrame
-        from io import StringIO
+        data.to_csv("downloaded_data.csv", index=False)
+    else:   
+        print(f"Failed to fetch data. Status code: {response.status_code}")
 
-        csv_data = StringIO(response.text)
-        data = pd.read_csv(csv_data)
+    # Step 1: Clean and forward-fill column B values to fill missing data
+    data[data.columns[1]] = pd.to_numeric(data[data.columns[1]], errors="coerce") # Convert the value column to float
+    data["BAMLH0A0HYM2_filled"] = data[data.columns[1]].ffill()
 
-    # Function to clean and convert values to float
-    def clean_float(value):
-        try:
-            clean_value = re.sub(r"[^0-9.]", "", str(value))
-            parts = clean_value.split(".")
-            if len(parts) > 2:
-                clean_value = parts[0] + "." + "".join(parts[1:])
-            return float(clean_value)
-        except ValueError:
-            return np.nan
-
-    # Load the CSV file
-    # data = pd.read_csv('BAMLH0A0HYM2.csv')
-
-    # Convert the 'DATE' column to a datetime format for sorting
-    data["Date"] = pd.to_datetime(data["observation_date"])
-
-    # Step 1: Clean and convert column B values to float
-    data["BAMLH0A0HYM2_clean"] = data["BAMLH0A0HYM2"].apply(clean_float)
-
-    # Step 2: Replace missing values (NaNs) in the cleaned column
-    data["BAMLH0A0HYM2_filled"] = data["BAMLH0A0HYM2_clean"].ffill()
-
-    # Step 3: Calculate the median of the last 3650 rows in column C
+    # Step 2: Calculate the median of the last 3650 rows in column C
     data["median_3650"] = (
         data["BAMLH0A0HYM2_filled"].rolling(window=3650, min_periods=1).median()
     )
 
-    # Step 4: Calculate the average of values in column C for the next 90 to 97 days
-    def calculate_future_average(series):
-        averages = []
-        for i in range(len(series)):
-            if i + 97 < len(series):
-                future_avg = series[i + 90 : i + 98].mean()
-            else:
-                future_avg = np.nan
-            averages.append(future_avg)
-        return averages
+    # Step 3: Calculate the average of values in column C for the next 90 to 97 days
+    data["future_avg"] = data["BAMLH0A0HYM2_filled"].shift(90).rolling(window=8).mean() #faster approach
 
-    # data['future_avg'] = calculate_future_average(data['BAMLH0A0HYM2_filled'])
-    data["future_avg"] = data["BAMLH0A0HYM2_filled"].shift(90).rolling(window=8).mean()
-
-    # Step 5: Calculate the rolling average of the last 7 values
+    # Step 4: Calculate the rolling average of the last 7 values
     data["rolling_avg_7"] = (
         data["BAMLH0A0HYM2_filled"].rolling(window=7, min_periods=1).mean()
     )
 
-    # Step 6: Determine the status (RISING, FALLING, or N_A)
+    # Step 5: Determine the status (RISING, FALLING, or N_A)
     def calculate_status(current, future_avg):
         if pd.isna(future_avg):
             return ""
@@ -103,7 +115,7 @@ def calc_economy_status():
         lambda row: calculate_status(row["rolling_avg_7"], row["future_avg"]), axis=1
     )
 
-    # Step 7: Determine the position (ABOVE, BELOW, or N_A) relative to the median
+    # Step 6: Determine the position (ABOVE, BELOW, or N_A) relative to the median
     def calculate_position(current, median_3650):
         if pd.isna(median_3650):
             return ""
@@ -120,7 +132,7 @@ def calc_economy_status():
         axis=1,
     )
 
-    # Step 8: Determine the final status based on columns F and G
+    # Step 7: Determine the final status based on columns F and G
     def calculate_final_status(row, prev_final_status):
         if row["status"] == "" or row["position"] == "":
             return prev_final_status
@@ -146,13 +158,10 @@ def calc_economy_status():
         prev_final_status = status
 
     data["final_status"] = final_status
-    data = data.sort_values(by="Date", ascending=False).reset_index(drop=True)
+    data = data.sort_values(by=data.columns[0], ascending=False).reset_index(drop=True)
 
     # Save the output to a new CSV file
-    # data.to_csv('output_data.csv', index=False)
-
-    # Ensure Date is sorted from most recent to oldest
-    data = data.sort_values("Date", ascending=False)
+    #data.to_csv('output_data.csv', index=False)
 
     # Step 1: Get the most recent final status
     latest_status = data.loc[data["final_status"] != "", "final_status"].iloc[0]
@@ -176,5 +185,9 @@ def calc_economy_status():
     )
 
     # Print the current status, date since it started, and preceding status
-    status = f'Current status: "{latest_status}", since: "{first_occurrence["Date"].date()}", before: "{preceding_status}"'
+    status = f'Current status: "{latest_status}", since: "{first_occurrence[data.columns[0]].date()}", before: "{preceding_status}"'
     return status
+
+
+if __name__ == "__main__":
+    print(calc_economy_status())
